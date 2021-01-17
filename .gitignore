@@ -1,2 +1,8 @@
 __pycache__/
 .ipynb_checkpoints
+sudoku_solver-*.zip
+sudoku_solver-*.json
+classical_planning*.zip
+classical_planning*.json
+adversarial_search*.zip
+adversarial_search*.json
