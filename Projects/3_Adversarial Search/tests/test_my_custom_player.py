@@ -54,7 +54,7 @@ class CustomPlayerPlayTest(BaseCustomPlayerTest):
         agents = (Agent(CustomPlayer, "Player 1"),
                   Agent(CustomPlayer, "Player 2"))
         initial_state = Isolation()
-        winner, game_history, _ = play((agents, initial_state, self.time_limit, 0))
+        winner, game_history, _, _, _ = play((agents, initial_state, self.time_limit, 0))
         
         state = initial_state
         moves = deque(game_history)

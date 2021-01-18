@@ -15,6 +15,8 @@ from queue import Empty
 
 from .isolation import Isolation, DebugState
 
+from inspect import signature
+
 __all__ = ['Isolation', 'DebugState', 'Status', 'play', 'fork_get_action']
 logger = logging.getLogger(__name__)
 
@@ -91,7 +93,7 @@ class TimedQueue:
 def play(args): return _play(*args)  # multithreading ThreadPool.map doesn't expand args
 
 
-def _play(agents, game_state, time_limit, match_id, debug=False):
+def _play(agents, game_state, time_limit, match_id, heuristic=None, debug=False):
     """ Run a match between two agents by alternately soliciting them to
     select a move and applying it to advance the game state.
 
@@ -120,7 +122,8 @@ def _play(agents, game_state, time_limit, match_id, debug=False):
     game_history = []
     winner = None
     status = Status.NORMAL
-    players = [a.agent_class(player_id=i) for i, a in enumerate(agents)]
+    #players = [a.agent_class(player_id=i, heuristic=heuristic) for i, a in enumerate(agents) if 'heuristic' in signature(a.agent_class).parameters]
+    players = [a.agent_class(player_id=i, heuristic=heuristic) if 'heuristic' in signature(a.agent_class).parameters else a.agent_class(player_id=i) for i, a in enumerate(agents)]
     logger.info(GAME_INFO.format(initial_state, *agents))
     while not game_state.terminal_test():
         active_idx = game_state.player()
@@ -158,7 +161,12 @@ def _play(agents, game_state, time_limit, match_id, debug=False):
             winner, loser = loser, winner  # swap winner/loser if active player won
 
     logger.info(RESULT_INFO.format(status, game_state, game_history, winner, loser))
-    return winner, game_history, match_id
+    node_count, rounds = 0, 0
+    for player in players:
+        if hasattr(player, 'context') and player.context:
+            node_count = sum(player.context['node'])
+            rounds = player.context['round']
+    return winner, game_history, match_id, node_count, rounds
 
 
 def fork_get_action(game_state, active_player, time_limit, debug=False):

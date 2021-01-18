@@ -13,7 +13,7 @@ from multiprocessing.pool import ThreadPool as Pool
 
 from isolation import Isolation, Agent, play
 from sample_players import RandomPlayer, GreedyPlayer, MinimaxPlayer
-from my_custom_player import CustomPlayer
+from my_custom_player import *
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ TEST_AGENTS = {
     "SELF": Agent(CustomPlayer, "Custom TestAgent")
 }
 
-Match = namedtuple("Match", "players initial_state time_limit match_id debug_flag")
+Match = namedtuple("Match", "players initial_state time_limit match_id heuristic debug_flag")
 
 
 def _run_matches(matches, name, num_processes=NUM_PROCS, debug=False):
@@ -44,7 +44,7 @@ def _run_matches(matches, name, num_processes=NUM_PROCS, debug=False):
 
 def make_fair_matches(matches, results):
     new_matches = []
-    for _, game_history, match_id in results:
+    for _, game_history, match_id, _ in results:
         if len(game_history) < 2:
             logger.warn(textwrap.dedent("""\
                 Unable to duplicate match {}
@@ -57,7 +57,8 @@ def make_fair_matches(matches, results):
                           initial_state=state,
                           time_limit=match.time_limit,
                           match_id=-match.match_id,
-                          debug_flag=match.debug_flag)
+                          heuristic=match.heuristic,
+                          debug_flag=match.debug_flag,)
         new_matches.append(fair_match)
     return new_matches
 
@@ -83,12 +84,14 @@ def play_matches(custom_agent, test_agent, cli_args):
             initial_state=state,
             time_limit=cli_args.time_limit,
             match_id=2 * match_id,
+            heuristic=cli_args.heuristic,
             debug_flag=cli_args.debug))
         matches.append(Match(
             players=(custom_agent, test_agent),
             initial_state=state,
             time_limit=cli_args.time_limit,
             match_id=2 * match_id + 1,
+            heuristic=cli_args.heuristic,
             debug_flag=cli_args.debug))
 
     # Run all matches -- must be done before fair matches in order to populate
@@ -100,18 +103,20 @@ def play_matches(custom_agent, test_agent, cli_args):
         results.extend(_run_matches(_matches, custom_agent.name, cli_args.processes))
 
     wins = sum(int(r[0].name == custom_agent.name) for r in results)
-    return wins, len(matches) * (1 + int(cli_args.fair_matches))
+    nodes = sum(r[3] for r in results) / len(results)
+    rounds = sum(r[4] for r in results) / len(results)
+    return wins, len(matches) * (1 + int(cli_args.fair_matches)), nodes
 
 
 def main(args):
     test_agent = TEST_AGENTS[args.opponent.upper()]
     custom_agent = Agent(CustomPlayer, "Custom Agent")
-    wins, num_games = play_matches(custom_agent, test_agent, args)
+    wins, num_games, nodes, rounds = play_matches(custom_agent, test_agent, args)
 
-    logger.info("Your agent won {:.1f}% of matches against {}".format(
-       100. * wins / num_games, test_agent.name))
-    print("Your agent won {:.1f}% of matches against {}".format(
-       100. * wins / num_games, test_agent.name))
+    logger.info("Your agent won {:.1f}% (avg nodes {:.1f}) of matches against {} in {:.1f} avg rounds".format(
+       100. * wins / num_games, 1.*nodes / num_games, test_agent.name, rounds/ num_games))
+    print("Your agent won {:.1f}% (avg nodes {:.1f}) of matches against {} in {:.1f} avg rounds".format(
+       100. * wins / num_games, 1.*nodes / num_games, test_agent.name, rounds/ num_games))
     print()
 
 
@@ -177,6 +182,12 @@ if __name__ == "__main__":
         """
     )
     parser.add_argument(
+        '-u', '--heuristic', type=int, default=0, choices=list(HEURISTICS),
+        help="""\
+            Run the CustomAgent using one of the custom heuristics .
+        """
+    )
+    parser.add_argument(
         '-t', '--time_limit', type=int, default=TIME_LIMIT,
         help="Set the maximum allowed time (in milliseconds) for each call to agent.get_action()."
     )
@@ -186,6 +197,7 @@ if __name__ == "__main__":
     logging.info(
         "Search Configuration:\n" +
         "Opponent: {}\n".format(args.opponent) +
+        "Heuristic: {}\n".format(args.heuristic) +
         "Rounds: {}\n".format(args.rounds) +
         "Fair Matches: {}\n".format(args.fair_matches) +
         "Time Limit: {}\n".format(args.time_limit) +
