@@ -1,5 +1,4 @@
-
-from itertools import chain, combinations
+from itertools import chain, combinations, product
 from aimacode.planning import Action
 from aimacode.utils import expr
 
@@ -19,8 +18,7 @@ class ActionLayer(BaseActionLayer):
         --------
         layers.ActionNode
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        return any(a == ~b for a,b in product(self.children[actionA], self.children[actionB]))
 
 
     def _interference(self, actionA, actionB):
@@ -34,8 +32,7 @@ class ActionLayer(BaseActionLayer):
         --------
         layers.ActionNode
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        return any(a == ~b for a,b in chain(product(self.parents[actionA], self.children[actionB]), product(self.children[actionA], self.parents[actionB])))
 
     def _competing_needs(self, actionA, actionB):
         """ Return True if any preconditions of the two actions are pairwise mutex in the parent layer
@@ -49,8 +46,7 @@ class ActionLayer(BaseActionLayer):
         layers.ActionNode
         layers.BaseLayer.parent_layer
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        return any(self.parent_layer.is_mutex(a, b) for a,b in product(actionA.preconditions, actionB.preconditions))
 
 
 class LiteralLayer(BaseLiteralLayer):
@@ -66,13 +62,11 @@ class LiteralLayer(BaseLiteralLayer):
         --------
         layers.BaseLayer.parent_layer
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        return all(self.parent_layer.is_mutex(a,b) for a,b in product(self.parents[literalA] , self.parents[literalB]))
 
     def _negation(self, literalA, literalB):
         """ Return True if two literals are negations of each other """
-        # TODO: implement this function
-        raise NotImplementedError
+        return literalA == ~literalB
 
 
 class PlanningGraph:
@@ -109,6 +103,12 @@ class PlanningGraph:
         layer.update_mutexes()
         self.literal_layers = [layer]
         self.action_layers = []
+    
+    def levelcost(self, literal):
+        for i, layer in enumerate(self.literal_layers):
+            if literal in layer:
+                return i
+        return -1
 
     def h_levelsum(self):
         """ Calculate the level sum heuristic for the planning graph
@@ -135,8 +135,10 @@ class PlanningGraph:
         --------
         Russell-Norvig 10.3.1 (3rd Edition)
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        self.fill()
+        costs = [self.levelcost(goal) for goal in self.goal]
+        
+        return sum(costs)
 
     def h_maxlevel(self):
         """ Calculate the max level heuristic for the planning graph
@@ -165,8 +167,12 @@ class PlanningGraph:
         -----
         WARNING: you should expect long runtimes using this heuristic with A*
         """
-        # TODO: implement maxlevel heuristic
-        raise NotImplementedError
+        # maxlevel heuristic
+        self.fill()
+        costs = [self.levelcost(goal) for goal in self.goal]
+
+        return max(costs)
+
 
     def h_setlevel(self):
         """ Calculate the set level heuristic for the planning graph
@@ -190,8 +196,18 @@ class PlanningGraph:
         -----
         WARNING: you should expect long runtimes using this heuristic on complex problems
         """
-        # TODO: implement setlevel heuristic
-        raise NotImplementedError
+        # setlevel heuristic
+        self.fill()
+        for i, layer in enumerate(self.literal_layers):
+            cond = all(goal in layer for goal in self.goal)
+            if not cond:
+                continue
+            mutex = False
+            if len(self.goal) > 1:
+                mutex = any(layer.is_mutex(goal_a, goal_b) for goal_a, goal_b in product(self.goal, self.goal))
+            if not mutex:
+                return i
+
 
     ##############################################################################
     #                     DO NOT MODIFY CODE BELOW THIS LINE                     #
